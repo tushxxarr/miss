@@ -1,5 +1,7 @@
 import importlib
 import re
+import threading
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from typing import Optional, List
 
 from telegram import Message, Chat, Update, Bot, User
@@ -16,6 +18,28 @@ from tg_bot import dispatcher, updater, TOKEN, WEBHOOK, OWNER_ID, DONATION_LINK,
 from tg_bot.modules import ALL_MODULES
 from tg_bot.modules.helper_funcs.chat_status import is_user_admin
 from tg_bot.modules.helper_funcs.misc import paginate_modules
+
+
+# --- NATIVE DUMMY SERVER FOR RENDER ---
+class HealthCheckHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header('Content-type', 'text/html')
+        self.end_headers()
+        self.wfile.write(b"Bot is alive and running!")
+        
+    def log_message(self, format, *args):
+        pass # Suppress console spam
+
+def run_dummy_server():
+    server = HTTPServer(('0.0.0.0', int(PORT)), HealthCheckHandler)
+    server.serve_forever()
+
+def keep_alive():
+    t = threading.Thread(target=run_dummy_server, daemon=True)
+    t.start()
+# --------------------------------------
+
 
 PM_START_TEXT = """
 Hey there! My name is *{}*, I'm here to help you manage your groups! Hit /help to find out more about how to use me to my full potential.
@@ -436,6 +460,9 @@ def main():
     else:
         LOGGER.info("Using long polling.")
         updater.start_polling(timeout=15, read_latency=4)
+        
+        # Starts the native dummy server thread ONLY if using long polling
+        keep_alive()
 
     updater.idle()
 
