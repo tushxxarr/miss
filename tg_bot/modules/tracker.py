@@ -29,6 +29,12 @@ def track_chat(bot, update, args):
     # Save the target chat and automatically route it to the environment Track Log Channel
     sql.add_track(target_chat, str(TRACK_LOG_CHANNEL))
     update.effective_message.reply_text(f"✅ **Tracking Activated!**\nAll messages from `{target_chat}` will now be automatically forwarded to your dedicated Track Log Channel.", parse_mode=ParseMode.MARKDOWN)
+    
+    # Extra Feature: Alert the Tracking Channel that a new target was added
+    try:
+        bot.send_message(TRACK_LOG_CHANNEL, f"📡 **New Tracking Initiated**\nTarget Chat: `{target_chat}`\nAuthorized by: `{update.effective_user.id}`", parse_mode=ParseMode.MARKDOWN)
+    except Exception:
+        pass
 
 @run_async
 def untrack_chat(bot, update, args):
@@ -42,6 +48,12 @@ def untrack_chat(bot, update, args):
     target_chat = args[0]
     if sql.remove_track(target_chat):
         update.effective_message.reply_text(f"🛑 Stopped tracking messages from `{target_chat}`.", parse_mode=ParseMode.MARKDOWN)
+        
+        # Extra Feature: Alert the Tracking Channel that a target was removed
+        try:
+            bot.send_message(TRACK_LOG_CHANNEL, f"🛑 **Tracking Terminated**\nTarget Chat: `{target_chat}`", parse_mode=ParseMode.MARKDOWN)
+        except Exception:
+            pass
     else:
         update.effective_message.reply_text("❌ That chat is not currently being tracked.")
 
@@ -63,12 +75,20 @@ def track_messages(bot, update):
         if user.username:
             user_text += f" (@{user.username})"
         user_text += f"\n🆔 **User ID:** `{user.id}`"
-        user_text += f"\n💬 **From Chat:** {update.effective_chat.title} (`{chat_id}`)\n"
-        user_text += f"📝 **Message:**"
+        user_text += f"\n💬 **From Chat:** {update.effective_chat.title} (`{chat_id}`)"
+        
+        # Extra Feature: Generate a direct clickable link to the original message
+        msg_id = update.effective_message.message_id
+        if chat_id.startswith("-100"):
+            clean_chat_id = chat_id[4:]
+            msg_link = f"https://t.me/c/{clean_chat_id}/{msg_id}"
+            user_text += f"\n🔗 **Message Link:** [Click Here to View]({msg_link})"
+            
+        user_text += f"\n📝 **Message:**"
         
         try:
             # 1. Send the User Details box
-            bot.send_message(log_group_id, user_text, parse_mode=ParseMode.MARKDOWN)
+            bot.send_message(log_group_id, user_text, parse_mode=ParseMode.MARKDOWN, disable_web_page_preview=True)
             # 2. Forward the actual message (preserves photos, stickers, media, etc.)
             update.effective_message.forward(chat_id=log_group_id)
         except Exception as e:
