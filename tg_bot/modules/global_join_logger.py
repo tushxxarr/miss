@@ -67,5 +67,5 @@ def fetch_all_details(bot, update):
             
     update.effective_message.reply_text(f"✅ Finished! Fetched and sent details for {success_count} groups to your log channel.")
 
-dispatcher.add_handler(MessageHandler(Filters.status_update.new_chat_members, join_logger))
+dispatcher.add_handler(MessageHandler(Filters.status_update.new_chat_members, join_logger), group=1)
 dispatcher.add_handler(CommandHandler("fetchdetails", fetch_all_details))
