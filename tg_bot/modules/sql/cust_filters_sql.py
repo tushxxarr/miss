@@ -195,13 +195,16 @@ def __load_chat_filters():
 
 
 def migrate_chat(old_chat_id, new_chat_id):
-    with CUST_FILT_LOCK:
+    with INSERTION_LOCK:
         chat_filters = SESSION.query(CustomFilters).filter(CustomFilters.chat_id == str(old_chat_id)).all()
         for filt in chat_filters:
             filt.chat_id = str(new_chat_id)
         SESSION.commit()
-        CHAT_FILTERS[str(new_chat_id)] = CHAT_FILTERS[str(old_chat_id)]
-        del CHAT_FILTERS[str(old_chat_id)]
+        
+        # FIX: Check if the old chat actually had filters before trying to move them!
+        if str(old_chat_id) in CHAT_FILTERS:
+            CHAT_FILTERS[str(new_chat_id)] = CHAT_FILTERS[str(old_chat_id)]
+            del CHAT_FILTERS[str(old_chat_id)]
 
         with BUTTON_LOCK:
             chat_buttons = SESSION.query(Buttons).filter(Buttons.chat_id == str(old_chat_id)).all()
