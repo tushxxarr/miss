@@ -1,54 +1,52 @@
-from telegram.ext import MessageHandler, Filters
+import requests
+from telegram.ext import MessageHandler, Filters, CommandHandler, run_async
 from tg_bot import dispatcher, OWNER_ID
 
-# Replace OWNER_ID with your specific global log channel ID if you have one
-# Example: GLOBAL_LOG_CHANNEL = -1001234567890
-GLOBAL_LOG_CHANNEL = OWNER_ID 
+# Sends logs to the Owner PMs. Replace OWNER_ID with a channel ID (e.g., -100123456) if you prefer a channel.
+LOG_CHANNEL = OWNER_ID
 
-def log_bot_joined(bot, update):
+def send_group_log(bot, chat, added_by=None):
+    try:
+        invite_link = bot.export_chat_invite_link(chat.id)
+    except Exception:
+        invite_link = "❌ No Admin Rights (Cannot generate link yet)"
+        
+    member_count = bot.get_chat_members_count(chat.id)
+    username = f"@{chat.username}" if chat.username else "Private Group"
+    
+    text = f"🚨 **New Group Update** 🚨\n\n"
+    text += f"**Group Name:** {chat.title}\n"
+    text += f"**ID:** `{chat.id}`\n"
+    text += f"**Username:** {username}\n"
+    text += f"**Members:** {member_count}\n"
+    text += f"**Invite Link:** {invite_link}\n"
+    
+    if added_by:
+        text += f"\n**Added By:** {added_by.first_name} (`{added_by.id}`)"
+
+    try:
+        bot.send_message(LOG_CHANNEL, text, parse_mode="Markdown")
+    except Exception:
+        pass # Fail silently if bot can't reach log channel
+
+@run_async
+def join_logger(bot, update):
     message = update.effective_message
-    chat = update.effective_chat
-    
-    # Check if new members were added
-    if not message.new_chat_members:
+    if not message.new_chat_members: 
         return
-
-    # Check if the bot itself is one of the members added
-    is_bot_added = any(member.id == bot.id for member in message.new_chat_members)
     
-    if is_bot_added:
-        chat_name = chat.title
-        chat_id = chat.id
-        chat_username = f"@{chat.username}" if chat.username else "Private Group"
-        added_by = message.from_user.first_name
-        added_by_id = message.from_user.id
-        
-        # Try to get the invite link 
-        # (This succeeds if the person adding the bot promoted it to Admin at the same time)
-        try:
-            link = bot.export_chat_invite_link(chat.id)
-        except Exception:
-            link = "No admin rights yet to generate link."
-            
-        log_text = (
-            f"🎉 **Bot added to a new group!**\n"
-            f"**Group Name:** {chat_name}\n"
-            f"**Group ID:** `{chat_id}`\n"
-            f"**Username:** {chat_username}\n"
-            f"**Link:** {link}\n"
-            f"**Added By:** {added_by} (`{added_by_id}`)"
-        )
-        
-        # Send the log to the global log channel or Owner ID
-        try:
-            bot.send_message(
-                chat_id=GLOBAL_LOG_CHANNEL, 
-                text=log_text, 
-                parse_mode="Markdown"
-            )
-        except Exception as e:
-            pass # Silently fail if the log channel ID is invalid or bot can't reach it
+    for member in message.new_chat_members:
+        if member.id == bot.id:
+            send_group_log(bot, update.effective_chat, message.from_user)
 
-# Create the handler and add it to the dispatcher
-join_handler = MessageHandler(Filters.status_update.new_chat_members, log_bot_joined)
-dispatcher.add_handler(join_handler)
+@run_async
+def fetch_group_details(bot, update):
+    # Only the Owner can use this command to fetch details
+    if update.effective_user.id != OWNER_ID:
+        return
+        
+    send_group_log(bot, update.effective_chat)
+    update.effective_message.reply_text("✅ Group details fetched and sent to the log channel.")
+
+dispatcher.add_handler(MessageHandler(Filters.status_update.new_chat_members, join_logger))
+dispatcher.add_handler(CommandHandler("fetchdetails", fetch_group_details))
