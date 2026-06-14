@@ -438,7 +438,9 @@ def main():
         LOGGER.info("Using long polling.")
         updater.start_polling(timeout=15, read_latency=4)
         
-keep_alive()
+
+    # Starts the Flask dummy server thread in the background
+    keep_alive()
 
     updater.idle()
 
