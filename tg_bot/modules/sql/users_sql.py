@@ -1,6 +1,6 @@
 import threading
 
-from sqlalchemy import Column, Integer, UnicodeText, String, ForeignKey, UniqueConstraint, func
+from sqlalchemy import Column, Integer, BigInteger, UnicodeText, String, ForeignKey, UniqueConstraint, func, text
 
 from tg_bot import dispatcher
 from tg_bot.modules.sql import BASE, SESSION
@@ -8,7 +8,7 @@ from tg_bot.modules.sql import BASE, SESSION
 
 class Users(BASE):
     __tablename__ = "users"
-    user_id = Column(Integer, primary_key=True)
+    user_id = Column(BigInteger, primary_key=True)
     username = Column(UnicodeText)
 
     def __init__(self, user_id, username=None):
@@ -41,7 +41,7 @@ class ChatMembers(BASE):
                              onupdate="CASCADE",
                              ondelete="CASCADE"),
                   nullable=False)
-    user = Column(Integer,
+    user = Column(BigInteger,
                   ForeignKey("users.user_id",
                              onupdate="CASCADE",
                              ondelete="CASCADE"),
@@ -68,7 +68,26 @@ def ensure_bot_in_db():
     with INSERTION_LOCK:
         bot = Users(dispatcher.bot.id, dispatcher.bot.username)
         SESSION.merge(bot)
-        SESSION.commit()
+        try:
+            SESSION.commit()
+        except Exception as e:
+            SESSION.rollback()
+            # If the database crashes because of the integer limit, automatically fix it!
+            if "out of range" in str(e).lower() or "numericvalueoutofrange" in str(e).lower():
+                SESSION.execute(text("DROP TABLE IF EXISTS chat_members CASCADE"))
+                SESSION.execute(text("DROP TABLE IF EXISTS users CASCADE"))
+                SESSION.commit()
+                
+                # Rebuild tables with the new BigInteger sizes
+                Users.__table__.create(checkfirst=True)
+                ChatMembers.__table__.create(checkfirst=True)
+                
+                # Resave the bot
+                bot = Users(dispatcher.bot.id, dispatcher.bot.username)
+                SESSION.merge(bot)
+                SESSION.commit()
+            else:
+                raise e
 
 
 def update_user(user_id, username, chat_id=None, chat_name=None):
