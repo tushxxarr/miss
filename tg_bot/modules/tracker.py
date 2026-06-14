@@ -1,7 +1,14 @@
+import os
 from telegram.ext import CommandHandler, MessageHandler, Filters, run_async
 from telegram import ParseMode
 from tg_bot import dispatcher, OWNER_ID
 import tg_bot.modules.sql.tracker_sql as sql
+
+# Fetches the separate Track Log Channel ID from Render Environment Variables!
+try:
+    TRACK_LOG_CHANNEL = int(os.environ.get("TRACK_LOG_CHANNEL"))
+except (ValueError, TypeError):
+    TRACK_LOG_CHANNEL = None
 
 @run_async
 def track_chat(bot, update, args):
@@ -9,15 +16,19 @@ def track_chat(bot, update, args):
     if update.effective_user.id != OWNER_ID:
         return
         
+    if not TRACK_LOG_CHANNEL:
+        update.effective_message.reply_text("⚠️ `TRACK_LOG_CHANNEL` environment variable is not set! Please add it in Render Settings.", parse_mode=ParseMode.MARKDOWN)
+        return
+
     if len(args) < 1:
         update.effective_message.reply_text("⚠️ Please provide the Chat ID to track.\n**Example:** `/track -10012345678`", parse_mode=ParseMode.MARKDOWN)
         return
         
     target_chat = args[0]
-    current_chat = str(update.effective_chat.id)
     
-    sql.add_track(target_chat, current_chat)
-    update.effective_message.reply_text(f"✅ **Tracking Activated!**\nAll messages from `{target_chat}` will now be forwarded to THIS group along with user details.", parse_mode=ParseMode.MARKDOWN)
+    # Save the target chat and automatically route it to the environment Track Log Channel
+    sql.add_track(target_chat, str(TRACK_LOG_CHANNEL))
+    update.effective_message.reply_text(f"✅ **Tracking Activated!**\nAll messages from `{target_chat}` will now be automatically forwarded to your dedicated Track Log Channel.", parse_mode=ParseMode.MARKDOWN)
 
 @run_async
 def untrack_chat(bot, update, args):
